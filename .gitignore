@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# 运行时产物：数据库和项目日志，首次启动自动创建
+data/
+logs/
+
+# pytest
+.pytest_cache/

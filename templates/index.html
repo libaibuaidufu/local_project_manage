@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Python 项目启动器</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__inner">
+      <h1 class="topbar__title">
+        <span class="topbar__logo" aria-hidden="true">▶</span>
+        Python 项目启动器
+      </h1>
+      <div class="topbar__right">
+        <p class="counter" id="counter" aria-live="polite">
+          运行中 <strong id="counter-running">0</strong> / <span id="counter-total">0</span>
+        </p>
+        <a class="btn btn--ghost btn--sm" id="btn-export" href="/api/projects/export" download
+           title="把全部项目配置下载为 JSON 备份文件">下载数据</a>
+        <button type="button" class="btn btn--ghost btn--sm" id="btn-import"
+                title="从之前下载的备份文件恢复项目配置">导入数据</button>
+        <input type="file" id="import-file" accept=".json,application/json" hidden>
+        <button type="button" class="btn btn--primary" id="btn-add">＋ 添加项目</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid" id="grid"></div>
+
+    <div class="empty" id="empty" hidden>
+      <p class="empty__title">还没有项目</p>
+      <p class="empty__hint">点击右上角「添加项目」，填入工作目录和启动命令即可。</p>
+    </div>
+  </main>
+
+  <!-- 添加 / 编辑项目 -->
+  <div class="modal" id="modal-form" hidden>
+    <div class="modal__backdrop" data-close="form"></div>
+    <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="form-title">
+      <div class="modal__header">
+        <h2 class="modal__title" id="form-title">添加项目</h2>
+        <button type="button" class="modal__close" data-close="form" aria-label="关闭">×</button>
+      </div>
+
+      <form id="project-form" class="modal__body" novalidate>
+        <fieldset class="field">
+          <legend>项目类型</legend>
+          <div class="kinds">
+            <label class="kind">
+              <input type="radio" name="kind" value="process" checked>
+              <span class="kind__title">服务进程</span>
+              <span class="kind__desc">要用命令跑起来的项目，可启动 / 停止 / 看日志。</span>
+            </label>
+            <label class="kind">
+              <input type="radio" name="kind" value="static">
+              <span class="kind__title">静态页面</span>
+              <span class="kind__desc">一堆 HTML 文件，不用启动，点开就能在浏览器里看。</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="field">
+          <label for="f-name">项目名称</label>
+          <input type="text" id="f-name" name="name" required maxlength="80"
+                 placeholder="PC TTS" autocomplete="off">
+        </div>
+
+        <div class="field">
+          <label for="f-dir">工作目录</label>
+          <input type="text" id="f-dir" name="working_dir" required
+                 placeholder="D:\Python\Project\pc_tts" autocomplete="off" spellcheck="false">
+          <p class="field__hint">启动时会先 cd 到这个目录，等同于你手动进目录再执行命令。</p>
+        </div>
+
+        <div class="field" data-only="static" hidden>
+          <label for="f-entry">入口文件<span class="field__optional">选填</span></label>
+          <input type="text" id="f-entry" name="entry_file"
+                 placeholder="index.html" autocomplete="off" spellcheck="false">
+          <p class="field__hint">相对工作目录的路径。留空会自动找 <code>index.html</code>；找不到就列出目录让你自己挑。</p>
+        </div>
+
+        <div class="field" data-only="process">
+          <label for="f-command">启动命令</label>
+          <input type="text" id="f-command" name="command"
+                 placeholder="uv run python server.py" autocomplete="off" spellcheck="false">
+          <p class="field__hint">任何 Windows 能执行的命令都可以，比如 <code>python app.py</code>、<code>.venv\Scripts\python.exe app.py</code>、<code>npm run dev</code>。</p>
+        </div>
+
+        <div class="field" data-only="process">
+          <label for="f-port">端口<span class="field__optional">选填</span></label>
+          <input type="number" id="f-port" name="port" min="1" max="65535"
+                 placeholder="8774" autocomplete="off">
+          <p class="field__hint">填了之后卡片上会出现可点击的链接，并显示端口是否已在监听。</p>
+        </div>
+
+        <fieldset class="field" data-only="process">
+          <legend>环境变量<span class="field__optional">选填</span></legend>
+          <div id="env-rows" class="env"></div>
+          <button type="button" class="btn btn--ghost btn--sm" id="btn-add-env">＋ 添加环境变量</button>
+        </fieldset>
+
+        <label class="checkbox" data-only="process">
+          <input type="checkbox" id="f-auto" name="auto_start">
+          <span>开机自动启动（管理器启动后自动拉起这个项目）</span>
+        </label>
+
+        <p class="form-error" id="form-error" role="alert" hidden></p>
+
+        <div class="modal__footer">
+          <button type="button" class="btn btn--ghost" data-close="form">取消</button>
+          <button type="submit" class="btn btn--primary" id="btn-save">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 日志 -->
+  <div class="modal modal--wide" id="modal-logs" hidden>
+    <div class="modal__backdrop" data-close="logs"></div>
+    <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="logs-title">
+      <div class="modal__header">
+        <h2 class="modal__title" id="logs-title">日志</h2>
+        <button type="button" class="modal__close" data-close="logs" aria-label="关闭">×</button>
+      </div>
+
+      <div class="logs__toolbar">
+        <div class="tabs" role="tablist">
+          <button type="button" class="tab is-active" data-stream="all" role="tab">全部</button>
+          <button type="button" class="tab" data-stream="stdout" role="tab">stdout</button>
+          <button type="button" class="tab" data-stream="stderr" role="tab">stderr</button>
+        </div>
+        <label class="logs__runs">
+          <span>运行记录</span>
+          <select id="log-runs"></select>
+        </label>
+      </div>
+
+      <pre class="console" id="console" tabindex="0" aria-label="项目日志输出"></pre>
+
+      <div class="modal__footer modal__footer--split">
+        <button type="button" class="btn btn--ghost btn--sm" id="btn-clear-view">清空当前视图</button>
+        <label class="checkbox checkbox--inline">
+          <input type="checkbox" id="f-autoscroll" checked>
+          <span>自动滚动</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- 确认删除 -->
+  <div class="modal" id="modal-confirm" hidden>
+    <div class="modal__backdrop" data-close="confirm"></div>
+    <div class="modal__panel modal__panel--narrow" role="dialog" aria-modal="true"
+         aria-labelledby="confirm-title">
+      <div class="modal__header">
+        <h2 class="modal__title" id="confirm-title">确认删除</h2>
+        <button type="button" class="modal__close" data-close="confirm" aria-label="关闭">×</button>
+      </div>
+      <div class="modal__body">
+        <p id="confirm-text"></p>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn--ghost" data-close="confirm">取消</button>
+        <button type="button" class="btn btn--danger" id="btn-confirm">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

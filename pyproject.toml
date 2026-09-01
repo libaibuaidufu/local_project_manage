@@ -1,0 +1,20 @@
+[project]
+name = "python-manage"
+version = "0.1.0"
+description = "Windows 本机 Python 项目启动器 —— 网页端启动/停止/重启/看日志"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=3.1.0",
+    "psutil>=6.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# 进程测试会真的创建子进程，输出比较吵，默认安静一些
+addopts = "-q"
