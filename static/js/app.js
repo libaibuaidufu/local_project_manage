@@ -27,13 +27,10 @@ const state = {
   /** 确认弹窗当前动作 {onConfirm}；关闭即清空 */
   confirm: null,
   logs: {
-    projectId: null,
-    runId: null,
-    offsets: { stdout: 0, stderr: 0 },
-    /** [{stream: 'stdout'|'stderr', text: string}]，切 tab 时无需重新请求 */
-    lines: [],
-    filter: 'all',
-    autoscroll: true,
+    /** 当前激活的标签页项目 ID */
+    activeTab: null,
+    /** 已打开的标签页 Map<projectId, {projectId, runId, offsets, lines, filter, autoscroll}> */
+    tabs: new Map(),
   },
   timers: { status: null, log: null },
 };
@@ -501,62 +498,152 @@ async function submitForm(event) {
 
 // ------------------------------------------------------------------ 日志窗口
 
-function openLogs(project) {
-  const logs = state.logs;
-  logs.projectId = project.id;
-  logs.runId = null;          // 交给后端选最近一次运行
-  logs.offsets = { stdout: 0, stderr: 0 };
-  logs.lines = [];
-  $('logs-title').textContent = `${project.name} — 日志`;
-  $('console').innerHTML = '';
-  openModal('logs');
+function openLogPanel(project) {
+  const panel = $('log-panel');
+  const tabs = state.logs.tabs;
+
+  // 如果标签页已存在，切换到它
+  if (tabs.has(project.id)) {
+    switchLogTab(project.id);
+    panel.hidden = false;
+    return;
+  }
+
+  // 创建新标签页
+  tabs.set(project.id, {
+    projectId: project.id,
+    projectName: project.name,
+    runId: null,
+    offsets: { stdout: 0, stderr: 0 },
+    lines: [],
+    filter: 'all',
+    autoscroll: true,
+  });
+
+  state.logs.activeTab = project.id;
+  panel.hidden = false;
+  renderLogTabs();
   pollLogs();
-  state.timers.log = setInterval(pollLogs, POLL_LOG_MS);
+
+  if (!state.timers.log) {
+    state.timers.log = setInterval(pollLogs, POLL_LOG_MS);
+  }
+}
+
+function switchLogTab(projectId) {
+  state.logs.activeTab = projectId;
+  renderLogTabs();
+  renderLogToolbar();
+  renderConsole();
+}
+
+function closeLogTab(projectId, event) {
+  if (event) event.stopPropagation();
+
+  const tabs = state.logs.tabs;
+  tabs.delete(projectId);
+
+  // 如果关闭的是当前激活的标签页
+  if (state.logs.activeTab === projectId) {
+    const remaining = Array.from(tabs.keys());
+    if (remaining.length > 0) {
+      state.logs.activeTab = remaining[0];
+    } else {
+      state.logs.activeTab = null;
+      $('log-panel').hidden = true;
+      stopLogPolling();
+      return;
+    }
+  }
+
+  renderLogTabs();
+  renderLogToolbar();
+  renderConsole();
+}
+
+function closeLogPanel() {
+  state.logs.tabs.clear();
+  state.logs.activeTab = null;
+  $('log-panel').hidden = true;
+  stopLogPolling();
+}
+
+function renderLogTabs() {
+  const container = $('log-tabs');
+  const tabs = state.logs.tabs;
+  const activeId = state.logs.activeTab;
+
+  container.innerHTML = Array.from(tabs.values()).map((tab) => {
+    const isActive = tab.projectId === activeId;
+    const cls = isActive ? 'log-panel__tab is-active' : 'log-panel__tab';
+    return `
+      <button type="button" class="${cls}" data-tab-id="${tab.projectId}">
+        <span>${esc(tab.projectName)}</span>
+        <button type="button" class="log-panel__tab-close" data-close-tab="${tab.projectId}">×</button>
+      </button>
+    `;
+  }).join('');
+}
+
+function renderLogToolbar() {
+  const activeTab = getActiveLogTab();
+  if (!activeTab) return;
+
+  // 更新流过滤器状态
+  document.querySelectorAll('.log-panel__toolbar .tab').forEach((el) => {
+    el.classList.toggle('is-active', el.dataset.stream === activeTab.filter);
+  });
+
+  // 更新自动滚动复选框
+  $('f-autoscroll').checked = activeTab.autoscroll;
+}
+
+function getActiveLogTab() {
+  if (!state.logs.activeTab) return null;
+  return state.logs.tabs.get(state.logs.activeTab);
 }
 
 function stopLogPolling() {
   if (state.timers.log) clearInterval(state.timers.log);
   state.timers.log = null;
-  state.logs.projectId = null;
 }
 
 async function pollLogs() {
-  const logs = state.logs;
-  if (logs.projectId == null) return;
+  const activeTab = getActiveLogTab();
+  if (!activeTab) return;
 
   const params = new URLSearchParams({
-    stdout_at: String(logs.offsets.stdout),
-    stderr_at: String(logs.offsets.stderr),
+    stdout_at: String(activeTab.offsets.stdout),
+    stderr_at: String(activeTab.offsets.stderr),
   });
-  if (logs.runId) params.set('run_id', logs.runId);
+  if (activeTab.runId) params.set('run_id', activeTab.runId);
 
-  const result = await api(`/api/projects/${logs.projectId}/logs?${params}`);
+  const result = await api(`/api/projects/${activeTab.projectId}/logs?${params}`);
   if (!result.ok) {
-    stopLogPolling();
     toast(result.message, 'err');
     return;
   }
 
   const data = result.data;
-  if (data.run_id && data.run_id !== logs.runId) {
-    logs.runId = data.run_id;
+  if (data.run_id && data.run_id !== activeTab.runId) {
+    activeTab.runId = data.run_id;
   }
-  renderRunOptions(data.runs || [], logs.runId);
+  renderRunOptions(data.runs || [], activeTab.runId);
 
   let added = false;
   ['stdout', 'stderr'].forEach((stream) => {
     const chunk = data[stream];
     if (!chunk) return;
-    logs.offsets[stream] = chunk.offset ?? logs.offsets[stream];
+    activeTab.offsets[stream] = chunk.offset ?? activeTab.offsets[stream];
     if (!chunk.text) return;
     chunk.text.split('\n').forEach((line) => {
-      if (line !== '') logs.lines.push({ stream, text: line });
+      if (line !== '') activeTab.lines.push({ stream, text: line });
     });
     added = true;
   });
 
   // 只保留最近 4000 行，否则长时间开着窗口会把浏览器拖慢
-  if (logs.lines.length > 4000) logs.lines = logs.lines.slice(-4000);
+  if (activeTab.lines.length > 4000) activeTab.lines = activeTab.lines.slice(-4000);
   if (added) renderConsole();
 }
 
@@ -575,10 +662,15 @@ function renderRunOptions(runs, current) {
 
 function renderConsole() {
   const box = $('console');
-  const logs = state.logs;
-  const filtered = logs.filter === 'all'
-    ? logs.lines
-    : logs.lines.filter((line) => line.stream === logs.filter);
+  const activeTab = getActiveLogTab();
+  if (!activeTab) {
+    box.innerHTML = '';
+    return;
+  }
+
+  const filtered = activeTab.filter === 'all'
+    ? activeTab.lines
+    : activeTab.lines.filter((line) => line.stream === activeTab.filter);
 
   box.innerHTML = filtered.map((line) => {
     const isMeta = /^[=-]{10,}$/.test(line.text.trim()) || /^(项目|启动时间|工作目录|启动命令|端口|环境变量|进程结束|退出码|结束原因)\s+:/.test(line.text);
@@ -587,14 +679,16 @@ function renderConsole() {
     return cls ? `<span class="${cls}">${text}</span>` : text;
   }).join('\n');
 
-  if (logs.autoscroll) box.scrollTop = box.scrollHeight;
+  if (activeTab.autoscroll) box.scrollTop = box.scrollHeight;
 }
 
 function switchRun(runId) {
-  const logs = state.logs;
-  logs.runId = runId || null;
-  logs.offsets = { stdout: 0, stderr: 0 };
-  logs.lines = [];
+  const activeTab = getActiveLogTab();
+  if (!activeTab) return;
+
+  activeTab.runId = runId || null;
+  activeTab.offsets = { stdout: 0, stderr: 0 };
+  activeTab.lines = [];
   $('console').innerHTML = '';
   pollLogs();
 }
@@ -632,7 +726,7 @@ function bindEvents() {
         runAction(id, button.dataset.act);
         break;
       case 'logs':
-        openLogs(project);
+        openLogPanel(project);
         break;
       case 'edit':
         openForm(project);
@@ -668,31 +762,67 @@ function bindEvents() {
     el.addEventListener('click', () => closeModal(el.dataset.close));
   });
 
-  document.querySelectorAll('.tab').forEach((tab) => {
+  // 日志面板相关事件
+  $('btn-close-panel').addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeLogPanel();
+  });
+
+  $('log-tabs').addEventListener('click', (event) => {
+    const tab = event.target.closest('[data-tab-id]');
+    if (tab && !event.target.closest('[data-close-tab]')) {
+      switchLogTab(Number(tab.dataset.tabId));
+    }
+
+    const closeBtn = event.target.closest('[data-close-tab]');
+    if (closeBtn) {
+      closeLogTab(Number(closeBtn.dataset.closeTab), event);
+    }
+  });
+
+  document.querySelectorAll('.log-panel__toolbar .tab').forEach((tab) => {
     tab.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach((t) => t.classList.remove('is-active'));
+      const activeTab = getActiveLogTab();
+      if (!activeTab) return;
+
+      document.querySelectorAll('.log-panel__toolbar .tab').forEach((t) => t.classList.remove('is-active'));
       tab.classList.add('is-active');
-      state.logs.filter = tab.dataset.stream;
+      activeTab.filter = tab.dataset.stream;
       renderConsole();
     });
   });
 
   $('log-runs').addEventListener('change', (event) => switchRun(event.target.value));
   $('btn-clear-view').addEventListener('click', () => {
+    const activeTab = getActiveLogTab();
+    if (!activeTab) return;
+
     // 只清视图不删文件：进程可能正持有文件句柄，截断它会让写入位置错乱
-    state.logs.lines = [];
+    activeTab.lines = [];
     $('console').innerHTML = '';
     toast('已清空当前视图（日志文件保留在 logs/ 目录）', 'ok', 3000);
   });
   $('f-autoscroll').addEventListener('change', (event) => {
-    state.logs.autoscroll = event.target.checked;
-    if (state.logs.autoscroll) renderConsole();
+    const activeTab = getActiveLogTab();
+    if (!activeTab) return;
+
+    activeTab.autoscroll = event.target.checked;
+    if (activeTab.autoscroll) renderConsole();
   });
 
-  // Esc 关闭最上层弹窗
+  // Esc 关闭最上层弹窗或日志面板
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    for (const name of ['confirm', 'logs', 'form']) {
+
+    // 先检查日志面板是否打开
+    if (!$('log-panel').hidden) {
+      closeLogPanel();
+      return;
+    }
+
+    // 再检查弹窗
+    for (const name of ['confirm', 'form']) {
       if (!$(`modal-${name}`).hidden) {
         closeModal(name);
         break;

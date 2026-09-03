@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import sys
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, send_from_directory
 from werkzeug.exceptions import HTTPException
 
 import config
@@ -43,10 +43,12 @@ def create_app(*, bootstrap: bool = True) -> Flask:
     app.register_blueprint(projects.bp)
     app.register_blueprint(processes.bp)
     app.register_blueprint(static_sites.bp)
+    app.register_blueprint(static_sites.api_bp)
 
     @app.get("/")
     def index() -> str:
-        return render_template("index.html")
+        """返回静态 HTML 文件。"""
+        return send_from_directory("static", "index.html")
 
     @app.errorhandler(HTTPException)
     def handle_http_error(exc: HTTPException):

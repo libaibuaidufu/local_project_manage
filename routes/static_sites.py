@@ -23,13 +23,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, abort, redirect, render_template, send_from_directory
+from flask import Blueprint, abort, jsonify, redirect, request, send_from_directory
 from werkzeug.utils import safe_join
 
 from manager import project_manager as repo
 from manager.project_manager import DEFAULT_ENTRIES
 
 bp = Blueprint("sites", __name__, url_prefix="/sites")
+api_bp = Blueprint("sites_api", __name__, url_prefix="/api/sites")
 
 
 def _load_static_project(project_id: int):
@@ -112,7 +113,17 @@ def site_file(project_id: int, subpath: str):
 
 
 def _render_listing(project, root: Path, subpath: str):
-    """列目录。没有 index.html 的项目（比如放了几个独立 html）靠这个页面进去。"""
+    """返回静态目录浏览页面。"""
+    return send_from_directory("static", "listing.html")
+
+
+@api_bp.get("/<int:project_id>/listing")
+def get_listing_data(project_id: int):
+    """API: 获取目录列表数据（JSON）。"""
+    project = _load_static_project(project_id)
+    root = _site_root(project)
+    subpath = request.args.get("path", "").strip("/")
+
     current = _resolve_inside(root, subpath) if subpath else root
     prefix = subpath.strip("/")
 
@@ -132,20 +143,27 @@ def _render_listing(project, root: Path, subpath: str):
                     "size": _human_size(item),
                 })
     except OSError as exc:
-        abort(500, description=f"无法读取目录：{exc}")
+        return jsonify({"success": False, "message": f"无法读取目录：{exc}"}), 500
 
     parent = None
     if prefix:
         head = prefix.rsplit("/", 1)[0] if "/" in prefix else ""
         parent = head
-    return render_template(
-        "listing.html",
-        project=project,
-        subpath=prefix,
-        parent=parent,
-        dirs=dirs,
-        files=files,
-    )
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "project": {
+                "id": project.id,
+                "name": project.name,
+                "working_dir": project.working_dir,
+            },
+            "subpath": prefix,
+            "parent": parent,
+            "dirs": dirs,
+            "files": files,
+        }
+    })
 
 
 def _human_size(path: Path) -> str:

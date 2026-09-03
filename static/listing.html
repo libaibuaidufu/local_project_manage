@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>目录浏览</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="listing">
+    <header class="listing__head">
+      <h1 class="listing__title" id="project-name">加载中...</h1>
+      <p class="listing__path">
+        <code id="project-path"></code>
+      </p>
+      <p class="listing__hint">
+        这个目录里没有 index.html，下面是目录内容，点文件名直接打开。
+      </p>
+      <a class="btn btn--ghost" href="/">← 回到项目管理</a>
+    </header>
+
+    <ul class="listing__items" id="listing-items">
+      <li class="listing__empty">加载中...</li>
+    </ul>
+  </div>
+
+  <script>
+    // 从 URL 解析项目 ID 和路径: /sites/{id}/{path}
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    const projectId = pathParts[1]; // sites 后面的第一段
+    const subpath = pathParts.slice(2).join('/'); // 剩余部分
+
+    async function loadListing() {
+      try {
+        const res = await fetch(`/api/sites/${projectId}/listing?path=${encodeURIComponent(subpath)}`);
+        const data = await res.json();
+
+        if (!data.success) {
+          document.getElementById('listing-items').innerHTML = `<li class="listing__empty">${data.message}</li>`;
+          return;
+        }
+
+        // 更新标题和路径
+        document.getElementById('project-name').textContent = data.data.project.name;
+        const pathCode = document.getElementById('project-path');
+        let fullPath = data.data.project.working_dir;
+        if (data.data.subpath) {
+          fullPath += '\\' + data.data.subpath.replace(/\//g, '\\');
+        }
+        pathCode.textContent = fullPath;
+        document.title = data.data.project.name + (data.data.subpath ? ' / ' + data.data.subpath : '');
+
+        // 渲染列表
+        const items = [];
+
+        // 父目录链接
+        if (data.data.parent !== null) {
+          items.push(`
+            <li class="listing__item">
+              <a class="listing__link" href="/sites/${projectId}/${data.data.parent}">
+                <span class="listing__icon">📁</span>
+                <span class="listing__name">..</span>
+              </a>
+            </li>
+          `);
+        }
+
+        // 目录
+        data.data.dirs.forEach(dir => {
+          items.push(`
+            <li class="listing__item">
+              <a class="listing__link" href="/sites/${projectId}/${dir.href}">
+                <span class="listing__icon">📁</span>
+                <span class="listing__name">${dir.name}</span>
+              </a>
+            </li>
+          `);
+        });
+
+        // 文件
+        data.data.files.forEach(file => {
+          const isHtml = file.name.toLowerCase().endsWith('.html') || file.name.toLowerCase().endsWith('.htm');
+          const icon = isHtml ? '🌐' : '📄';
+          items.push(`
+            <li class="listing__item">
+              <a class="listing__link" href="/sites/${projectId}/${file.href}">
+                <span class="listing__icon">${icon}</span>
+                <span class="listing__name">${file.name}</span>
+                <span class="listing__size">${file.size}</span>
+              </a>
+            </li>
+          `);
+        });
+
+        const listEl = document.getElementById('listing-items');
+        if (items.length === 0) {
+          listEl.innerHTML = '<li class="listing__empty">这个目录是空的。</li>';
+        } else {
+          listEl.innerHTML = items.join('');
+        }
+      } catch (err) {
+        document.getElementById('listing-items').innerHTML = `<li class="listing__empty">加载失败：${err.message}</li>`;
+      }
+    }
+
+    loadListing();
+  </script>
+</body>
+</html>

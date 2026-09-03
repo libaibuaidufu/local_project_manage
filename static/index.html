@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Python 项目启动器</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
   <header class="topbar">
@@ -117,38 +117,32 @@
     </div>
   </div>
 
-  <!-- 日志 -->
-  <div class="modal modal--wide" id="modal-logs" hidden>
-    <div class="modal__backdrop" data-close="logs"></div>
-    <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="logs-title">
-      <div class="modal__header">
-        <h2 class="modal__title" id="logs-title">日志</h2>
-        <button type="button" class="modal__close" data-close="logs" aria-label="关闭">×</button>
-      </div>
-
-      <div class="logs__toolbar">
-        <div class="tabs" role="tablist">
-          <button type="button" class="tab is-active" data-stream="all" role="tab">全部</button>
-          <button type="button" class="tab" data-stream="stdout" role="tab">stdout</button>
-          <button type="button" class="tab" data-stream="stderr" role="tab">stderr</button>
-        </div>
-        <label class="logs__runs">
-          <span>运行记录</span>
-          <select id="log-runs"></select>
-        </label>
-      </div>
-
-      <pre class="console" id="console" tabindex="0" aria-label="项目日志输出"></pre>
-
-      <div class="modal__footer modal__footer--split">
-        <button type="button" class="btn btn--ghost btn--sm" id="btn-clear-view">清空当前视图</button>
-        <label class="checkbox checkbox--inline">
-          <input type="checkbox" id="f-autoscroll" checked>
-          <span>自动滚动</span>
-        </label>
-      </div>
+  <!-- 日志面板 -->
+  <aside class="log-panel" id="log-panel" hidden>
+    <div class="log-panel__header">
+      <div class="log-panel__tabs" id="log-tabs" role="tablist"></div>
+      <button type="button" class="log-panel__close" id="btn-close-panel" title="关闭日志面板">×</button>
     </div>
-  </div>
+
+    <div class="log-panel__toolbar">
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab is-active" data-stream="all" role="tab">全部</button>
+        <button type="button" class="tab" data-stream="stdout" role="tab">stdout</button>
+        <button type="button" class="tab" data-stream="stderr" role="tab">stderr</button>
+      </div>
+      <label class="logs__runs">
+        <span>运行记录</span>
+        <select id="log-runs"></select>
+      </label>
+      <label class="checkbox checkbox--inline">
+        <input type="checkbox" id="f-autoscroll" checked>
+        <span>自动滚动</span>
+      </label>
+      <button type="button" class="btn btn--ghost btn--sm" id="btn-clear-view">清空视图</button>
+    </div>
+
+    <pre class="console" id="console" tabindex="0" aria-label="项目日志输出"></pre>
+  </aside>
 
   <!-- 确认删除 -->
   <div class="modal" id="modal-confirm" hidden>
@@ -171,6 +165,6 @@
 
   <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
 
-  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script src="/static/js/app.js"></script>
 </body>
 </html>
