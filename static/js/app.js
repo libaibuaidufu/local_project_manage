@@ -502,10 +502,14 @@ function openLogPanel(project) {
   const panel = $('log-panel');
   const tabs = state.logs.tabs;
 
-  // 如果标签页已存在，切换到它
+  // 如果标签页已存在，切换到它并显示面板
   if (tabs.has(project.id)) {
     switchLogTab(project.id);
     panel.hidden = false;
+    // 重新启动日志轮询
+    if (!state.timers.log) {
+      state.timers.log = setInterval(pollLogs, POLL_LOG_MS);
+    }
     return;
   }
 
@@ -561,9 +565,8 @@ function closeLogTab(projectId, event) {
   renderConsole();
 }
 
-function closeLogPanel() {
-  state.logs.tabs.clear();
-  state.logs.activeTab = null;
+function hideLogPanel() {
+  // 只隐藏面板，保留所有标签页状态
   $('log-panel').hidden = true;
   stopLogPolling();
 }
@@ -766,7 +769,7 @@ function bindEvents() {
   $('btn-close-panel').addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    closeLogPanel();
+    hideLogPanel();
   });
 
   $('log-tabs').addEventListener('click', (event) => {
@@ -811,13 +814,16 @@ function bindEvents() {
     if (activeTab.autoscroll) renderConsole();
   });
 
+  // 日志面板高度调整
+  initLogPanelResizer();
+
   // Esc 关闭最上层弹窗或日志面板
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
 
     // 先检查日志面板是否打开
     if (!$('log-panel').hidden) {
-      closeLogPanel();
+      hideLogPanel();
       return;
     }
 
@@ -838,6 +844,44 @@ function bindEvents() {
       refresh();
       startPolling();
     }
+  });
+}
+
+// ------------------------------------------------------------------ 日志面板高度调整
+
+function initLogPanelResizer() {
+  const panel = $('log-panel');
+  const resizer = $('log-resizer');
+  let startY = 0;
+  let startHeight = 0;
+  let isDragging = false;
+
+  resizer.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    isDragging = true;
+    startY = e.clientY;
+    startHeight = panel.offsetHeight;
+    resizer.classList.add('is-dragging');
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    e.preventDefault();
+
+    // 向上拖动增加高度，向下拖动减少高度
+    const deltaY = startY - e.clientY;
+    const newHeight = Math.max(200, Math.min(window.innerHeight * 0.85, startHeight + deltaY));
+    panel.style.height = `${newHeight}px`;
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!isDragging) return;
+    isDragging = false;
+    resizer.classList.remove('is-dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
   });
 }
 

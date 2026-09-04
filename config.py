@@ -16,7 +16,7 @@ DB_PATH = Path(os.environ.get("PPM_DB_PATH") or (DATA_DIR / "projects.db"))
 # 管理器自身的监听地址。默认只监听回环地址：本工具能执行任意 Windows 命令，
 # 暴露到局域网/公网等同于把这台机器交出去。
 HOST = os.environ.get("PPM_HOST", "127.0.0.1")
-PORT = int(os.environ.get("PPM_PORT", "5000"))
+PORT = int(os.environ.get("PPM_PORT", "8888"))
 DEBUG = os.environ.get("PPM_DEBUG", "0") == "1"
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
