@@ -139,12 +139,24 @@ code {
   flex-direction: column;
   gap: 12px;
   box-shadow: var(--shadow-sm);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, opacity 0.15s, transform 0.15s;
+  cursor: move; /* 鼠标悬停时显示可拖拽 */
 }
 
 .card:hover {
   border-color: var(--border-strong);
   box-shadow: var(--shadow);
+}
+
+.card.dragging {
+  opacity: 0.4;
+  transform: scale(0.95);
+  cursor: grabbing;
+}
+
+.card.drag-over {
+  border: 2px dashed var(--accent);
+  background: rgba(56, 189, 248, 0.05);
 }
 
 .card--running { border-left: 3px solid var(--green); }

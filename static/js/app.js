@@ -127,6 +127,7 @@ function renderList() {
     if (!card) {
       card = document.createElement('article');
       card.dataset.id = String(project.id);
+      card.draggable = true; // 启用拖拽
       grid.appendChild(card);
     }
     const sig = signature(project);
@@ -745,6 +746,72 @@ function bindEvents() {
         break;
     }
   });
+
+  // 拖拽排序
+  let dragSource = null;
+  const grid = $('grid');
+
+  grid.addEventListener('dragstart', (event) => {
+    const card = event.target.closest('.card');
+    if (!card) return;
+    dragSource = card;
+    card.classList.add('dragging');
+    event.dataTransfer.effectAllowed = 'move';
+  });
+
+  grid.addEventListener('dragend', (event) => {
+    const card = event.target.closest('.card');
+    if (card) {
+      card.classList.remove('dragging');
+    }
+    // 清除所有 drag-over 类
+    grid.querySelectorAll('.card').forEach(c => c.classList.remove('drag-over'));
+    dragSource = null;
+  });
+
+  grid.addEventListener('dragover', (event) => {
+    event.preventDefault(); // 允许 drop
+    const card = event.target.closest('.card');
+    if (!card || card === dragSource) return;
+
+    // 移除所有卡片的 drag-over 类
+    grid.querySelectorAll('.card').forEach(c => c.classList.remove('drag-over'));
+    // 给当前悬停的卡片添加 drag-over 类
+    card.classList.add('drag-over');
+
+    // 根据鼠标位置决定插入到前面还是后面
+    const rect = card.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    if (event.clientY < midY) {
+      grid.insertBefore(dragSource, card);
+    } else {
+      grid.insertBefore(dragSource, card.nextSibling);
+    }
+  });
+
+  grid.addEventListener('drop', async (event) => {
+    event.preventDefault();
+    // 收集当前 DOM 顺序的项目 ID
+    const newOrder = Array.from(grid.children).map(card => Number(card.dataset.id));
+
+    // 更新本地状态（立刻反映，不等服务器）
+    state.projects.sort((a, b) => newOrder.indexOf(a.id) - newOrder.indexOf(b.id));
+
+    // 发送到服务器持久化
+    const result = await api('/api/projects/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ order: newOrder }),
+    });
+
+    if (result.ok) {
+      toast('项目顺序已保存', 'ok', 2000);
+    } else {
+      toast(result.message || '保存顺序失败', 'error');
+      // 失败时重新加载以恢复服务器的顺序
+      loadProjects();
+    }
+  });
+
 
   $('btn-confirm').addEventListener('click', async () => {
     const action = state.confirm;

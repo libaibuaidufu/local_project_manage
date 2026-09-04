@@ -23,7 +23,7 @@ DEFAULT_ENTRIES = ("index.html", "index.htm")
 
 _COLUMNS = (
     "id, name, kind, working_dir, command, entry_file, port, environment, auto_start, "
-    "created_at, updated_at, last_pid, last_create_time, last_start_time, "
+    "display_order, created_at, updated_at, last_pid, last_create_time, last_start_time, "
     "last_run_id, last_status, last_exit_code"
 )
 
@@ -187,9 +187,11 @@ def static_info(project: Project) -> dict[str, Any]:
 
 
 def list_projects() -> list[Project]:
-    """按添加顺序返回所有项目。"""
+    """按 display_order 排序返回所有项目，order 相同时按 id 排序。"""
     with connect() as conn:
-        rows = conn.execute(f"SELECT {_COLUMNS} FROM projects ORDER BY id").fetchall()
+        rows = conn.execute(
+            f"SELECT {_COLUMNS} FROM projects ORDER BY display_order, id"
+        ).fetchall()
     return [Project.from_row(row) for row in rows]
 
 
@@ -296,3 +298,17 @@ def save_status(project_id: int, status: ProjectStatus | str) -> None:
         conn.execute(
             "UPDATE projects SET last_status = ? WHERE id = ?", (str(status), project_id)
         )
+
+
+def update_display_order(order_list: list[int]) -> None:
+    """批量更新项目的显示顺序。
+
+    order_list 是按前端拖拽后的顺序排列的项目 ID 列表。
+    每个 ID 的新 display_order 就是它在列表中的索引。
+    """
+    with connect() as conn:
+        for index, project_id in enumerate(order_list):
+            conn.execute(
+                "UPDATE projects SET display_order = ? WHERE id = ?",
+                (index, project_id)
+            )

@@ -200,3 +200,34 @@ def import_projects():
         "skipped": len(errors),
         "errors": errors,
     })
+
+
+@bp.post("/reorder")
+def reorder_projects():
+    """更新项目的显示顺序。
+
+    请求体格式：{"order": [id1, id2, id3, ...]}
+    其中 order 是按拖拽后的顺序排列的项目 ID 列表。
+    """
+    body = request.get_json(silent=True)
+    if body is None or not isinstance(body, dict):
+        return fail("请求体必须是 JSON 对象", 400)
+
+    order = body.get("order")
+    if not isinstance(order, list):
+        return fail("order 必须是数组", 400)
+
+    # 验证所有 ID 都是整数
+    try:
+        order_list = [int(pid) for pid in order]
+    except (TypeError, ValueError):
+        return fail("order 数组中必须都是项目 ID（整数）", 400)
+
+    # 验证所有 ID 都存在
+    existing_ids = {p.id for p in repo.list_projects()}
+    for pid in order_list:
+        if pid not in existing_ids:
+            return fail(f"项目 ID {pid} 不存在", 400)
+
+    repo.update_display_order(order_list)
+    return ok("项目顺序已更新")

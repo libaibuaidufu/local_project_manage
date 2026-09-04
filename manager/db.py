@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS projects (
     port             INTEGER,
     environment      TEXT    NOT NULL DEFAULT '{}',
     auto_start       INTEGER NOT NULL DEFAULT 0,
+    display_order    INTEGER NOT NULL DEFAULT 0,
     created_at       TEXT    NOT NULL,
     updated_at       TEXT    NOT NULL,
     last_pid         INTEGER,
@@ -86,10 +87,11 @@ def init_db() -> None:
 
 
 #: 后来加的列 -> 建列语句。老库缺哪列就补哪列。
-#: 只做加列，不改也不删已有列 —— 迁移出错的代价是用户的项目配置。
+#: 只做加列,不改也不删已有列 —— 迁移出错的代价是用户的项目配置。
 _ADDED_COLUMNS = {
     "kind": "ALTER TABLE projects ADD COLUMN kind TEXT NOT NULL DEFAULT 'process'",
     "entry_file": "ALTER TABLE projects ADD COLUMN entry_file TEXT NOT NULL DEFAULT ''",
+    "display_order": "ALTER TABLE projects ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0",
 }
 
 
